@@ -199,7 +199,7 @@ namespace Microsoft.AspNetCore.Hosting
         }
 
         [ConditionalFact]
-        [SkipOnHelix] // https://github.com/aspnet/AspNetCore/issues/7291
+        [SkipOnHelix("https://github.com/aspnet/AspNetCore/issues/7291")]
         public async Task WebHostStopAsyncUsesDefaultTimeoutIfGivenTokenDoesNotFire()
         {
             var data = new Dictionary<string, string>
@@ -315,7 +315,7 @@ namespace Microsoft.AspNetCore.Hosting
         }
 
         [ConditionalFact]
-        [SkipOnHelix] // https://github.com/aspnet/AspNetCore/issues/7291
+        [SkipOnHelix("https://github.com/aspnet/AspNetCore/issues/7291")]
         public void WebHostApplicationLifetimeEventsOrderedCorrectlyDuringShutdown()
         {
             using (var host = CreateBuilder()
@@ -702,8 +702,8 @@ namespace Microsoft.AspNetCore.Hosting
                 await Assert.ThrowsAsync<InvalidOperationException>(() => host.StartAsync());
                 Assert.True(hostedServiceCalls1[0]);
                 Assert.False(hostedServiceCalls2[0]);
-                Assert.True(started.All(s => s));
-                Assert.True(started2.All(s => s));
+                Assert.False(started.All(s => s)); // Server doesn't start if hosted services throw
+                Assert.False(started2.All(s => s));
                 host.Dispose();
                 Assert.True(hostedServiceCalls1[1]);
                 Assert.True(hostedServiceCalls2[1]);

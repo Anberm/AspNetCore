@@ -1,22 +1,6 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
-namespace Microsoft.AspNetCore.Internal
-{
-    public static partial class AwaitableThreadPool
-    {
-        public static Microsoft.AspNetCore.Internal.AwaitableThreadPool.Awaitable Yield() { throw null; }
-        [System.Runtime.InteropServices.StructLayoutAttribute(System.Runtime.InteropServices.LayoutKind.Sequential, Size=1)]
-        public readonly partial struct Awaitable : System.Runtime.CompilerServices.ICriticalNotifyCompletion, System.Runtime.CompilerServices.INotifyCompletion
-        {
-            public bool IsCompleted { get { throw null; } }
-            public Microsoft.AspNetCore.Internal.AwaitableThreadPool.Awaitable GetAwaiter() { throw null; }
-            public void GetResult() { }
-            public void OnCompleted(System.Action continuation) { }
-            public void UnsafeOnCompleted(System.Action continuation) { }
-        }
-    }
-}
 namespace Microsoft.AspNetCore.SignalR.Client
 {
     public partial class HubConnection
@@ -49,6 +33,7 @@ namespace Microsoft.AspNetCore.SignalR.Client
         public System.Threading.Tasks.Task StopAsync(System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
         [System.Diagnostics.DebuggerStepThroughAttribute]
         public System.Threading.Tasks.Task<System.Threading.Channels.ChannelReader<object>> StreamAsChannelCoreAsync(string methodName, System.Type returnType, object[] args, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsyncCore<TResult>(string methodName, object[] args, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
     }
     public partial class HubConnectionBuilder : Microsoft.AspNetCore.SignalR.Client.IHubConnectionBuilder, Microsoft.AspNetCore.SignalR.ISignalRBuilder
     {
@@ -141,6 +126,17 @@ namespace Microsoft.AspNetCore.SignalR.Client
         public static System.Threading.Tasks.Task<System.Threading.Channels.ChannelReader<TResult>> StreamAsChannelAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
         [System.Diagnostics.DebuggerStepThroughAttribute]
         public static System.Threading.Tasks.Task<System.Threading.Channels.ChannelReader<TResult>> StreamAsChannelCoreAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object[] args, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, object arg4, object arg5, object arg6, object arg7, object arg8, object arg9, object arg10, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, object arg4, object arg5, object arg6, object arg7, object arg8, object arg9, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, object arg4, object arg5, object arg6, object arg7, object arg8, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, object arg4, object arg5, object arg6, object arg7, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, object arg4, object arg5, object arg6, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, object arg4, object arg5, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, object arg4, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, object arg3, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, object arg2, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, object arg1, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
+        public static System.Collections.Generic.IAsyncEnumerable<TResult> StreamAsync<TResult>(this Microsoft.AspNetCore.SignalR.Client.HubConnection hubConnection, string methodName, System.Threading.CancellationToken cancellationToken = default(System.Threading.CancellationToken)) { throw null; }
     }
     public enum HubConnectionState
     {

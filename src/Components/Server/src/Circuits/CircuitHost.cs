@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components.Browser;
 using Microsoft.AspNetCore.Components.Browser.Rendering;
 using Microsoft.AspNetCore.Components.Rendering;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
@@ -49,6 +50,7 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public event UnhandledExceptionEventHandler UnhandledException;
 
         public CircuitHost(
+            string circuitId,
             IServiceScope scope,
             CircuitClientProxy client,
             RendererRegistry rendererRegistry,
@@ -59,6 +61,7 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
             CircuitHandler[] circuitHandlers,
             ILogger logger)
         {
+            CircuitId = circuitId;
             _scope = scope ?? throw new ArgumentNullException(nameof(scope));
             Dispatcher = dispatcher;
             Client = client;
@@ -77,7 +80,7 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
             Renderer.UnhandledSynchronizationException += SynchronizationContext_UnhandledException;
         }
 
-        public string CircuitId { get; } = Guid.NewGuid().ToString();
+        public string CircuitId { get; }
 
         public Circuit Circuit { get; }
 
@@ -119,6 +122,12 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
                 if (!uriHelper.HasAttachedJSRuntime)
                 {
                     uriHelper.AttachJsRuntime(JSRuntime);
+                }
+
+                var navigationInterception = (RemoteNavigationInterception)Services.GetRequiredService<INavigationInterception>();
+                if (!navigationInterception.HasAttachedJSRuntime)
+                {
+                    navigationInterception.AttachJSRuntime(JSRuntime);
                 }
             }
         }
@@ -185,6 +194,8 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
 
         private async Task OnCircuitOpenedAsync(CancellationToken cancellationToken)
         {
+            Log.CircuitOpened(_logger, Circuit.Id);
+
             for (var i = 0; i < _circuitHandlers.Length; i++)
             {
                 var circuitHandler = _circuitHandlers[i];
@@ -201,6 +212,8 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
 
         public async Task OnConnectionUpAsync(CancellationToken cancellationToken)
         {
+            Log.ConnectionUp(_logger, Circuit.Id, Client.ConnectionId);
+
             try
             {
                 await HandlerLock.WaitAsync(cancellationToken);
@@ -226,6 +239,8 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
 
         public async Task OnConnectionDownAsync(CancellationToken cancellationToken)
         {
+            Log.ConnectionDown(_logger, Circuit.Id, Client.ConnectionId);
+
             try
             {
                 await HandlerLock.WaitAsync(cancellationToken);
@@ -256,6 +271,8 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
 
         private async Task OnCircuitDownAsync()
         {
+            Log.CircuitClosed(_logger, Circuit.Id);
+
             for (var i = 0; i < _circuitHandlers.Length; i++)
             {
                 var circuitHandler = _circuitHandlers[i];
@@ -274,13 +291,13 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         {
             Log.DisposingCircuit(_logger, CircuitId);
 
-            await Renderer.InvokeAsync((Func<Task>)(async () =>
+            await Renderer.InvokeAsync(async () =>
             {
                 await OnConnectionDownAsync(CancellationToken.None);
                 await OnCircuitDownAsync();
                 Renderer.Dispose();
                 _scope.Dispose();
-            }));
+            });
         }
 
         private void AssertInitialized()
@@ -305,11 +322,19 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         {
             private static readonly Action<ILogger, Type, string, string, Exception> _unhandledExceptionInvokingCircuitHandler;
             private static readonly Action<ILogger, string, Exception> _disposingCircuit;
+            private static readonly Action<ILogger, string, Exception> _onCircuitOpened;
+            private static readonly Action<ILogger, string, string, Exception> _onConnectionUp;
+            private static readonly Action<ILogger, string, string, Exception> _onConnectionDown;
+            private static readonly Action<ILogger, string, Exception> _onCircuitClosed;
 
             private static class EventIds
             {
                 public static readonly EventId ExceptionInvokingCircuitHandlerMethod = new EventId(100, "ExceptionInvokingCircuitHandlerMethod");
                 public static readonly EventId DisposingCircuit = new EventId(101, "DisposingCircuitHost");
+                public static readonly EventId OnCircuitOpened = new EventId(102, "OnCircuitOpened");
+                public static readonly EventId OnConnectionUp = new EventId(103, "OnConnectionUp");
+                public static readonly EventId OnConnectionDown = new EventId(104, "OnConnectionDown");
+                public static readonly EventId OnCircuitClosed = new EventId(105, "OnCircuitClosed");
             }
 
             static Log()
@@ -323,6 +348,26 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
                     LogLevel.Trace,
                     EventIds.DisposingCircuit,
                     "Disposing circuit with identifier {CircuitId}");
+
+                _onCircuitOpened = LoggerMessage.Define<string>(
+                    LogLevel.Debug,
+                    EventIds.OnCircuitOpened,
+                    "Opening circuit with id {CircuitId}.");
+
+                _onConnectionUp = LoggerMessage.Define<string, string>(
+                    LogLevel.Debug,
+                    EventIds.OnConnectionUp,
+                    "Circuit id {CircuitId} connected using connection {ConnectionId}.");
+
+                _onConnectionDown = LoggerMessage.Define<string, string>(
+                    LogLevel.Debug,
+                    EventIds.OnConnectionDown,
+                    "Circuit id {CircuitId} disconnected from connection {ConnectionId}.");
+
+                _onCircuitClosed = LoggerMessage.Define<string>(
+                   LogLevel.Debug,
+                   EventIds.OnCircuitClosed,
+                   "Closing circuit with id {CircuitId}.");
             }
 
             public static void UnhandledExceptionInvokingCircuitHandler(ILogger logger, CircuitHandler handler, string handlerMethod, Exception exception)
@@ -336,6 +381,17 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
             }
 
             public static void DisposingCircuit(ILogger logger, string circuitId) => _disposingCircuit(logger, circuitId, null);
+
+            public static void CircuitOpened(ILogger logger, string circuitId) => _onCircuitOpened(logger, circuitId, null);
+
+            public static void ConnectionUp(ILogger logger, string circuitId, string connectionId) =>
+                _onConnectionUp(logger, circuitId, connectionId, null);
+
+            public static void ConnectionDown(ILogger logger, string circuitId, string connectionId) =>
+                _onConnectionDown(logger, circuitId, connectionId, null);
+
+            public static void CircuitClosed(ILogger logger, string circuitId) =>
+                _onCircuitClosed(logger, circuitId, null);
         }
     }
 }

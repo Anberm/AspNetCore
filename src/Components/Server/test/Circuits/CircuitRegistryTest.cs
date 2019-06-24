@@ -2,9 +2,13 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Testing;
+using Microsoft.AspNetCore.Testing.xunit;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -34,8 +38,10 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public async Task ConnectAsync_TransfersClientOnActiveCircuit()
         {
             // Arrange
-            var registry = CreateRegistry();
-            var circuitHost = TestCircuitHost.Create();
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+
+            var registry = CreateRegistry(circuitIdFactory);
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId());
             registry.Register(circuitHost);
 
             var newClient = Mock.Of<IClientProxy>();
@@ -57,9 +63,11 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public async Task ConnectAsync_MakesInactiveCircuitActive()
         {
             // Arrange
-            var registry = CreateRegistry();
-            var circuitHost = TestCircuitHost.Create();
-            registry.DisconnectedCircuits.Set(circuitHost.CircuitId, circuitHost, new MemoryCacheEntryOptions { Size = 1 });
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+
+            var registry = CreateRegistry(circuitIdFactory);
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId());
+            registry.RegisterDisconnectedCircuit(circuitHost);
 
             var newClient = Mock.Of<IClientProxy>();
             var newConnectionId = "new-id";
@@ -81,10 +89,11 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public async Task ConnectAsync_InvokesCircuitHandlers_WhenCircuitWasPreviouslyDisconnected()
         {
             // Arrange
-            var registry = CreateRegistry();
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+            var registry = CreateRegistry(circuitIdFactory);
             var handler = new Mock<CircuitHandler> { CallBase = true };
-            var circuitHost = TestCircuitHost.Create(handlers: new[] { handler.Object });
-            registry.DisconnectedCircuits.Set(circuitHost.CircuitId, circuitHost, new MemoryCacheEntryOptions { Size = 1 });
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId(), handlers: new[] { handler.Object });
+            registry.RegisterDisconnectedCircuit(circuitHost);
 
             var newClient = Mock.Of<IClientProxy>();
             var newConnectionId = "new-id";
@@ -104,9 +113,10 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public async Task ConnectAsync_InvokesCircuitHandlers_WhenCircuitWasConsideredConnected()
         {
             // Arrange
-            var registry = CreateRegistry();
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+            var registry = CreateRegistry(circuitIdFactory);
             var handler = new Mock<CircuitHandler> { CallBase = true };
-            var circuitHost = TestCircuitHost.Create(handlers: new[] { handler.Object });
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId(), handlers: new[] { handler.Object });
             registry.Register(circuitHost);
 
             var newClient = Mock.Of<IClientProxy>();
@@ -199,11 +209,13 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public async Task Connect_WhileDisconnectIsInProgress()
         {
             // Arrange
-            var registry = new TestCircuitRegistry();
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+
+            var registry = new TestCircuitRegistry(circuitIdFactory);
             registry.BeforeDisconnect = new ManualResetEventSlim();
             var tcs = new TaskCompletionSource<int>();
 
-            var circuitHost = TestCircuitHost.Create();
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId());
             registry.Register(circuitHost);
             var client = Mock.Of<IClientProxy>();
             var newId = "new-connection";
@@ -238,13 +250,15 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public async Task Connect_WhileDisconnectIsInProgress_SeriallyExecutesCircuitHandlers()
         {
             // Arrange
-            var registry = new TestCircuitRegistry();
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+
+            var registry = new TestCircuitRegistry(circuitIdFactory);
             registry.BeforeDisconnect = new ManualResetEventSlim();
             // This verifies that connection up \ down events on a circuit handler are always invoked serially.
             var circuitHandler = new SerialCircuitHandler();
             var tcs = new TaskCompletionSource<int>();
 
-            var circuitHost = TestCircuitHost.Create(handlers: new[] { circuitHandler });
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId(), handlers: new[] { circuitHandler });
             registry.Register(circuitHost);
             var client = Mock.Of<IClientProxy>();
             var newId = "new-connection";
@@ -276,9 +290,11 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
         public async Task DisconnectWhenAConnectIsInProgress()
         {
             // Arrange
-            var registry = new TestCircuitRegistry();
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+
+            var registry = new TestCircuitRegistry(circuitIdFactory);
             registry.BeforeConnect = new ManualResetEventSlim();
-            var circuitHost = TestCircuitHost.Create();
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId());
             registry.Register(circuitHost);
             var client = Mock.Of<IClientProxy>();
             var oldId = circuitHost.Client.ConnectionId;
@@ -300,15 +316,108 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
             Assert.False(registry.DisconnectedCircuits.TryGetValue(circuitHost.CircuitId, out _));
         }
 
+        [Fact]
+        [Flaky("https://github.com/aspnet/AspNetCore-Internal/issues/2689", FlakyOn.All)]
+        public void CircuitRegistryUsesConfiguredMaxRetainedDisconnectedCircuitsValue()
+        {
+            // Arrange
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+            var maxCircuits = 3;
+            var circuitOptions = new CircuitOptions
+            {
+                MaxRetainedDisconnectedCircuits = maxCircuits,
+            };
+            var registry = new TestCircuitRegistry(circuitIdFactory, circuitOptions);
+            var hosts = Enumerable.Range(0, maxCircuits + 2)
+                .Select(_ => TestCircuitHost.Create())
+                .ToArray();
+
+            // Act
+            for (var i = 0; i < hosts.Length; i++)
+            {
+                registry.RegisterDisconnectedCircuit(hosts[i]);
+            }
+
+            // Assert
+            for (var i = 0; i < maxCircuits; i++)
+            {
+                Assert.True(registry.DisconnectedCircuits.TryGetValue(hosts[i].CircuitId, out var _));
+            }
+
+            // Additional circuits do not get registered.
+            Assert.False(registry.DisconnectedCircuits.TryGetValue(hosts[maxCircuits].CircuitId, out var _));
+            Assert.False(registry.DisconnectedCircuits.TryGetValue(hosts[maxCircuits + 1].CircuitId, out var _));
+        }
+
+        [Fact]
+        public async Task DisconnectedCircuitIsRemovedAfterConfiguredTimeout()
+        {
+            // Arrange
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+            var circuitOptions = new CircuitOptions
+            {
+                DisconnectedCircuitRetentionPeriod = TimeSpan.FromSeconds(3),
+            };
+            var registry = new TestCircuitRegistry(circuitIdFactory, circuitOptions);
+            var tcs = new TaskCompletionSource<object>();
+
+            registry.OnAfterEntryEvicted = () =>
+            {
+                tcs.TrySetResult(new object());
+            };
+            var circuitHost = TestCircuitHost.Create();
+
+            registry.RegisterDisconnectedCircuit(circuitHost);
+
+            // Act
+            // Verify it's present in the dictionary.
+            Assert.True(registry.DisconnectedCircuits.TryGetValue(circuitHost.CircuitId, out var _));
+            await Task.Run(() => tcs.Task.TimeoutAfter(TimeSpan.FromSeconds(10)));
+            Assert.False(registry.DisconnectedCircuits.TryGetValue(circuitHost.CircuitId, out var _));
+        }
+
+        [Fact]
+        public async Task ReconnectBeforeTimeoutDoesNotGetEntryToBeEvicted()
+        {
+            // Arrange
+            var circuitIdFactory = TestCircuitIdFactory.CreateTestFactory();
+            var circuitOptions = new CircuitOptions
+            {
+                DisconnectedCircuitRetentionPeriod = TimeSpan.FromSeconds(8),
+            };
+            var registry = new TestCircuitRegistry(circuitIdFactory, circuitOptions);
+            var tcs = new TaskCompletionSource<object>();
+
+            registry.OnAfterEntryEvicted = () =>
+            {
+                tcs.TrySetResult(new object());
+            };
+            var circuitHost = TestCircuitHost.Create(circuitIdFactory.CreateCircuitId());
+
+            registry.RegisterDisconnectedCircuit(circuitHost);
+            await registry.ConnectAsync(circuitHost.CircuitId, Mock.Of<IClientProxy>(), "new-connection", default);
+
+            // Act
+            await Task.Run(() => tcs.Task.TimeoutAfter(TimeSpan.FromSeconds(10)));
+
+            // Verify it's still connected
+            Assert.True(registry.ConnectedCircuits.TryGetValue(circuitHost.CircuitId, out var cacheValue));
+            Assert.Same(circuitHost, cacheValue);
+            // Nothing should be disconnected.
+            Assert.False(registry.DisconnectedCircuits.TryGetValue(circuitHost.CircuitId, out var _));
+        }
+
         private class TestCircuitRegistry : CircuitRegistry
         {
-            public TestCircuitRegistry()
-                : base(Options.Create(new CircuitOptions()), NullLogger<CircuitRegistry>.Instance)
+            public TestCircuitRegistry(CircuitIdFactory factory, CircuitOptions circuitOptions = null)
+                : base(Options.Create(circuitOptions ?? new CircuitOptions()), NullLogger<CircuitRegistry>.Instance, factory)
             {
             }
 
             public ManualResetEventSlim BeforeConnect { get; set; }
             public ManualResetEventSlim BeforeDisconnect { get; set; }
+
+            public Action OnAfterEntryEvicted { get; set; }
 
             protected override (CircuitHost, bool) ConnectCore(string circuitId, IClientProxy clientProxy, string connectionId)
             {
@@ -329,13 +438,20 @@ namespace Microsoft.AspNetCore.Components.Server.Circuits
 
                 return base.DisconnectCore(circuitHost, connectionId);
             }
+
+            protected override void OnEntryEvicted(object key, object value, EvictionReason reason, object state)
+            {
+                base.OnEntryEvicted(key, value, reason, state);
+                OnAfterEntryEvicted();
+            }
         }
 
-        private static CircuitRegistry CreateRegistry()
+        private static CircuitRegistry CreateRegistry(CircuitIdFactory factory = null)
         {
             return new CircuitRegistry(
                 Options.Create(new CircuitOptions()),
-                NullLogger<CircuitRegistry>.Instance);
+                NullLogger<CircuitRegistry>.Instance,
+                factory ?? TestCircuitIdFactory.CreateTestFactory());
         }
 
         private class SerialCircuitHandler : CircuitHandler

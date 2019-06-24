@@ -4,7 +4,7 @@
 using System;
 using System.IO;
 using System.Text;
-using System.Text.Json.Serialization;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Core;
@@ -23,14 +23,14 @@ namespace Microsoft.AspNetCore.Mvc.Infrastructure
             Encoding = Encoding.UTF8
         }.ToString();
 
-        private readonly MvcOptions _mvcOptions;
+        private readonly JsonOptions _options;
         private readonly ILogger<SystemTextJsonResultExecutor> _logger;
 
         public SystemTextJsonResultExecutor(
-            IOptions<MvcOptions> mvcOptions,
+            IOptions<JsonOptions> options,
             ILogger<SystemTextJsonResultExecutor> logger)
         {
-            _mvcOptions = mvcOptions.Value;
+            _options = options.Value;
             _logger = logger;
         }
 
@@ -71,7 +71,7 @@ namespace Microsoft.AspNetCore.Mvc.Infrastructure
             try
             {
                 var type = result.Value?.GetType() ?? typeof(object);
-                await JsonSerializer.WriteAsync(result.Value, type, writeStream, jsonSerializerOptions);
+                await JsonSerializer.WriteAsync(writeStream, result.Value, type, jsonSerializerOptions);
                 await writeStream.FlushAsync();
             }
             finally
@@ -100,7 +100,7 @@ namespace Microsoft.AspNetCore.Mvc.Infrastructure
             var serializerSettings = result.SerializerSettings;
             if (serializerSettings == null)
             {
-                return _mvcOptions.SerializerOptions;
+                return _options.JsonSerializerOptions;
             }
             else
             {

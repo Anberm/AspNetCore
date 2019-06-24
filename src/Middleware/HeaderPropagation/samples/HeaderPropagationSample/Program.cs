@@ -1,4 +1,3 @@
-using System.IO;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Hosting;
 
@@ -15,6 +14,7 @@ namespace HeaderPropagationSample
             Host.CreateDefaultBuilder(args)
                 .ConfigureWebHost(webBuilder =>
                 {
+                    webBuilder.UseKestrel();
                     webBuilder.UseStartup<Startup>();
                 });
     }

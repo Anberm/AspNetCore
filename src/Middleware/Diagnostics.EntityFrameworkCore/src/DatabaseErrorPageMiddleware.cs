@@ -131,6 +131,11 @@ namespace Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore
                             {
                                 var databaseExists = await relationalDatabaseCreator.ExistsAsync();
 
+                                if (databaseExists)
+                                {
+                                    databaseExists = await relationalDatabaseCreator.HasTablesAsync();
+                                }
+
                                 var migrationsAssembly = context.GetService<IMigrationsAssembly>();
                                 var modelDiffer = context.GetService<IMigrationsModelDiffer>();
 

@@ -3,8 +3,10 @@
 
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
@@ -18,6 +20,7 @@ using Microsoft.Extensions.DiagnosticAdapter;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Net.Http.Headers;
+using Moq;
 using Xunit;
 
 namespace Microsoft.AspNetCore.TestHost
@@ -28,7 +31,7 @@ namespace Microsoft.AspNetCore.TestHost
         public async Task GenericRawCreate()
         {
             var server = new TestServer();
-            var host = new HostBuilder()
+            using var host = new HostBuilder()
                 .ConfigureWebHost(webBuilder =>
                 {
                     webBuilder
@@ -45,7 +48,7 @@ namespace Microsoft.AspNetCore.TestHost
         [Fact]
         public async Task GenericCreateAndStartHost_GetTestServer()
         {
-            var host = await new HostBuilder()
+            using var host = await new HostBuilder()
                 .ConfigureWebHost(webBuilder =>
                 {
                     webBuilder
@@ -61,7 +64,7 @@ namespace Microsoft.AspNetCore.TestHost
         [Fact]
         public async Task GenericCreateAndStartHost_GetTestClient()
         {
-            var host = await new HostBuilder()
+            using var host = await new HostBuilder()
                 .ConfigureWebHost(webBuilder =>
                 {
                     webBuilder
@@ -89,7 +92,7 @@ namespace Microsoft.AspNetCore.TestHost
                 .Configure(app => { })
                 .UseTestServer();
 
-            var host = builder.Build();
+            using var host = builder.Build();
             host.Start();
         }
 
@@ -189,6 +192,28 @@ namespace Microsoft.AspNetCore.TestHost
 
             string result = await server.CreateClient().GetStringAsync("/path");
             Assert.Equal("RequestServices:True", result);
+        }
+
+        [Fact]
+        public async Task DispoingTheRequestBodyDoesNotDisposeClientStreams()
+        {
+            var builder = new WebHostBuilder().Configure(app =>
+            {
+                app.Run(async context =>
+                {
+                    using (var sr = new StreamReader(context.Request.Body))
+                    {
+                        await context.Response.WriteAsync(await sr.ReadToEndAsync());
+                    }
+                });
+            });
+            var server = new TestServer(builder);
+
+            var stream = new ThrowOnDisposeStream();
+            stream.Write(Encoding.ASCII.GetBytes("Hello World"));
+            var response = await server.CreateClient().PostAsync("/", new StreamContent(stream));
+            Assert.True(response.IsSuccessStatusCode);
+            Assert.Equal("Hello World", await response.Content.ReadAsStringAsync());
         }
 
         public class CustomContainerStartup
@@ -660,6 +685,19 @@ namespace Microsoft.AspNetCore.TestHost
             var responseBody = await response.Content.ReadAsStringAsync();
 
             Assert.Equal("otherhost:5678", responseBody);
+        }
+
+        private class ThrowOnDisposeStream : MemoryStream
+        {
+            protected override void Dispose(bool disposing)
+            {
+                throw new InvalidOperationException("Dispose should not happen!");
+            }
+
+            public override ValueTask DisposeAsync()
+            {
+                throw new InvalidOperationException("DisposeAsync should not happen!");
+            }
         }
 
         public class TestDiagnosticListener

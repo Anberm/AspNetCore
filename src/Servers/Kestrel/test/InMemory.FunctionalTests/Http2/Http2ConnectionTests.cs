@@ -1174,7 +1174,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        public async Task HEADERS_Received_WithTrailers_Discarded(bool sendData)
+        public async Task HEADERS_Received_WithTrailers_Available(bool sendData)
         {
             await InitializeConnectionAsync(_readTrailersApplication);
 
@@ -1206,10 +1206,12 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
 
             VerifyDecodedRequestHeaders(_browserRequestHeaders);
 
-            // Make sure the trailers are missing. https://github.com/aspnet/KestrelHttpServer/issues/2630
+            // Make sure the trailers are in the trailers collection.
             foreach (var header in _requestTrailers)
             {
                 Assert.False(_receivedHeaders.ContainsKey(header.Key));
+                Assert.True(_receivedTrailers.ContainsKey(header.Key));
+                Assert.Equal(header.Value, _receivedTrailers[header.Key]);
             }
 
             await StopConnectionAsync(expectedLastStreamId: 3, ignoreNonGoAwayFrames: false);
@@ -3288,7 +3290,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         [Theory]
         [InlineData(true)]
         [InlineData(false)]
-        public async Task CONTINUATION_Received_WithTrailers_Discarded(bool sendData)
+        public async Task CONTINUATION_Received_WithTrailers_Available(bool sendData)
         {
             await InitializeConnectionAsync(_readTrailersApplication);
 
@@ -3331,9 +3333,13 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
 
             VerifyDecodedRequestHeaders(_browserRequestHeaders);
 
-            // Make sure the trailers are missing. https://github.com/aspnet/KestrelHttpServer/issues/2630
+            // Make sure the trailers are in the trailers collection.
             Assert.False(_receivedHeaders.ContainsKey("trailer-1"));
             Assert.False(_receivedHeaders.ContainsKey("trailer-2"));
+            Assert.True(_receivedTrailers.ContainsKey("trailer-1"));
+            Assert.True(_receivedTrailers.ContainsKey("trailer-2"));
+            Assert.Equal("1", _receivedTrailers["trailer-1"]);
+            Assert.Equal("2", _receivedTrailers["trailer-2"]);
 
             await StopConnectionAsync(expectedLastStreamId: 3, ignoreNonGoAwayFrames: false);
         }
@@ -3597,7 +3603,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
                 withStreamId: 1);
 
             // Send a blocked request
-            var tcs = new TaskCompletionSource<object>(TaskContinuationOptions.RunContinuationsAsynchronously);
+            var tcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             task = tcs.Task;
             await StartStreamAsync(3, _browserRequestHeaders, endStream: false);
 
@@ -3829,6 +3835,50 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             await StartStreamAsync(1, headers, endStream: false);
 
             await WaitForStreamErrorAsync(1, Http2ErrorCode.INTERNAL_ERROR, "The connection was aborted by the application.");
+
+            // These would be refused if the cool-down period had expired
+            switch (finalFrameType)
+            {
+                case Http2FrameType.DATA:
+                    await SendDataAsync(1, new byte[100], endStream: true);
+                    break;
+                case Http2FrameType.WINDOW_UPDATE:
+                    await SendWindowUpdateAsync(1, 1024);
+                    break;
+                case Http2FrameType.HEADERS:
+                    await SendHeadersAsync(1, Http2HeadersFrameFlags.END_STREAM | Http2HeadersFrameFlags.END_HEADERS, _requestTrailers);
+                    break;
+                case Http2FrameType.CONTINUATION:
+                    await SendHeadersAsync(1, Http2HeadersFrameFlags.END_STREAM, _requestTrailers);
+                    await SendContinuationAsync(1, Http2ContinuationFrameFlags.END_HEADERS, _requestTrailers);
+                    break;
+                default:
+                    throw new NotImplementedException(finalFrameType.ToString());
+            }
+
+            await StopConnectionAsync(expectedLastStreamId: 1, ignoreNonGoAwayFrames: false);
+        }
+
+        [Theory]
+        [InlineData((int)(Http2FrameType.DATA))]
+        [InlineData((int)(Http2FrameType.WINDOW_UPDATE))]
+        [InlineData((int)(Http2FrameType.HEADERS))]
+        [InlineData((int)(Http2FrameType.CONTINUATION))]
+        public async Task ResetStream_ResetsAndDrainsRequest(int intFinalFrameType)
+        {
+            var finalFrameType = (Http2FrameType)intFinalFrameType;
+
+            var headers = new[]
+            {
+                new KeyValuePair<string, string>(HeaderNames.Method, "POST"),
+                new KeyValuePair<string, string>(HeaderNames.Path, "/"),
+                new KeyValuePair<string, string>(HeaderNames.Scheme, "http"),
+            };
+            await InitializeConnectionAsync(_appReset);
+
+            await StartStreamAsync(1, headers, endStream: false);
+
+            await WaitForStreamErrorAsync(1, Http2ErrorCode.CANCEL, "The HTTP/2 stream was reset by the application with error code CANCEL.");
 
             // These would be refused if the cool-down period had expired
             switch (finalFrameType)

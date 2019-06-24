@@ -15,15 +15,14 @@
     <HelixAvailableTargetQueue Include="Windows.81.Amd64.Open" Platform="Windows" />
     <HelixAvailableTargetQueue Include="Windows.7.Amd64.Open" Platform="Windows" />
     <HelixAvailableTargetQueue Include="Windows.10.Amd64.EnterpriseRS3.ASPNET.Open" Platform="Windows" EnableByDefault="false" />
-    <HelixAvailableTargetQueue Include="OSX.1012.Amd64.Open" Platform="OSX" />
-    <HelixAvailableTargetQueue Include="OSX.1014.Amd64.Open" Platform="OSX" />
-    <HelixAvailableTargetQueue Include="Ubuntu.1810.Amd64.Open" Platform="Linux" />
+    <HelixAvailableTargetQueue Include="OSX.1013.Amd64.Open" Platform="OSX" />
     <HelixAvailableTargetQueue Include="Ubuntu.1604.Amd64.Open" Platform="Linux" />
+    <HelixAvailableTargetQueue Include="Ubuntu.1804.Amd64.Open" Platform="Linux" />
     <HelixAvailableTargetQueue Include="Centos.7.Amd64.Open" Platform="Linux" />
     <HelixAvailableTargetQueue Include="Debian.8.Amd64.Open" Platform="Linux" />
     <HelixAvailableTargetQueue Include="Debian.9.Amd64.Open" Platform="Linux" />
     <HelixAvailableTargetQueue Include="Redhat.7.Amd64.Open" Platform="Linux" />
-    <HelixAvailableTargetQueue Include="Fedora.28.Amd64.Open" Platform="Linux" />
+    <HelixAvailableTargetQueue Include="(Fedora.28.Amd64.Open)Ubuntu.1604.Amd64.Open@mcr.microsoft.com/dotnet-buildtools/prereqs:fedora-28-helix-09ca40b-20190508143249" Platform="Linux" />
 
     <!--  TODO: re-enable Debian.9.Arm64.Open and Ubuntu.1804.Arm64.Open    -->
   </ItemGroup>
@@ -33,8 +32,7 @@
 
     <HelixAvailableTargetQueue Include="Windows.10.Amd64.EnterpriseRS3.ASPNET.Open" Platform="Windows" />
     <HelixAvailableTargetQueue Include="Windows.81.Amd64.Open" Platform="Windows" />
-    <!-- Disabled until https://github.com/dotnet/core-eng/issues/5506 is resolved -->
-    <!-- <HelixAvailableTargetQueue Condition="'$(IsWindowsOnlyTest)' == 'true'" Include="Windows.7.Amd64.Open" /> -->
+    <HelixAvailableTargetQueue Include="Windows.7.Amd64.Open" Platform="Windows" />
 
     <HelixContent Include="$(RepoRoot)src\Servers\IIS\tools\update_schema.ps1" />
     <HelixContent Include="$(RepoRoot)src\Servers\IIS\tools\UpdateIISExpressCertificate.ps1" />

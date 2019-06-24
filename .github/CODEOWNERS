@@ -6,6 +6,7 @@
 /.config/                       @aspnet/build
 /build/                         @aspnet/build
 /eng/                           @aspnet/build
+/eng/common/                    @dotnet-maestro-bot
 /eng/Versions.props             @dotnet-maestro-bot @dougbu
 /eng/Version.Details.xml        @dotnet-maestro-bot @dougbu
 /src/Components/                @SteveSandersonMS
@@ -15,7 +16,7 @@
 /src/Middleware/                @tratcher @anurse
 /src/ProjectTemplates/          @ryanbrandenburg
 /src/Security/                  @tratcher @anurse
-/src/Servers/                   @tratcher @jkotalik @anurse
+/src/Servers/                   @tratcher @jkotalik @anurse @halter73
 /src/Middleware/Rewrite         @jkotalik @anurse
 /src/Middleware/HttpsPolicy     @jkotalik @anurse
 /src/SignalR/                   @mikaelm12 @BrennanConroy @halter73 @anurse

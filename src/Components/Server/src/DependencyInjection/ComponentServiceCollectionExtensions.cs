@@ -1,8 +1,10 @@
 // Copyright (c) .NET Foundation. All rights reserved.
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
+using System;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Routing;
 using Microsoft.AspNetCore.Components.Server;
 using Microsoft.AspNetCore.Components.Server.BlazorPack;
 using Microsoft.AspNetCore.Components.Server.Circuits;
@@ -22,10 +24,13 @@ namespace Microsoft.Extensions.DependencyInjection
         /// Adds Server-Side Blazor services to the service collection.
         /// </summary>
         /// <param name="services">The <see cref="IServiceCollection"/>.</param>
+        /// <param name="configure">A callback to configure <see cref="CircuitOptions"/>.</param>
         /// <returns>An <see cref="IServerSideBlazorBuilder"/> that can be used to further customize the configuration.</returns>
-        public static IServerSideBlazorBuilder AddServerSideBlazor(this IServiceCollection services)
+        public static IServerSideBlazorBuilder AddServerSideBlazor(this IServiceCollection services, Action<CircuitOptions> configure = null)
         {
             var builder = new DefaultServerSideBlazorBuilder(services);
+
+            services.AddDataProtection();
 
             // This call INTENTIONALLY uses the AddHubOptions on the SignalR builder, because it will merge
             // the global HubOptions before running the configure callback. We want to ensure that happens
@@ -50,6 +55,9 @@ namespace Microsoft.Extensions.DependencyInjection
             // Components entrypoints, this lot is the same and repeated registrations are a no-op.
             services.TryAddEnumerable(ServiceDescriptor.Singleton<IPostConfigureOptions<StaticFileOptions>, ConfigureStaticFilesOptions>());
             services.TryAddSingleton<CircuitFactory, DefaultCircuitFactory>();
+
+            services.TryAddSingleton<CircuitIdFactory>();
+
             services.TryAddScoped(s => s.GetRequiredService<ICircuitAccessor>().Circuit);
             services.TryAddScoped<ICircuitAccessor, DefaultCircuitAccessor>();
 
@@ -66,8 +74,14 @@ namespace Microsoft.Extensions.DependencyInjection
             // These intentionally replace the non-interactive versions included in MVC.
             services.AddScoped<IUriHelper, RemoteUriHelper>();
             services.AddScoped<IJSRuntime, RemoteJSRuntime>();
+            services.AddScoped<INavigationInterception, RemoteNavigationInterception>();
             services.AddScoped<IComponentContext, RemoteComponentContext>();
             services.AddScoped<AuthenticationStateProvider, FixedAuthenticationStateProvider>();
+
+            if (configure != null)
+            {
+                services.Configure<CircuitOptions>(configure);
+            }
 
             return builder;
         }

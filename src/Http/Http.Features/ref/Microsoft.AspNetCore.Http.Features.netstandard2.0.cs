@@ -195,6 +195,19 @@ namespace Microsoft.AspNetCore.Http.Features
         System.Threading.CancellationToken RequestAborted { get; set; }
         void Abort();
     }
+    public partial interface IHttpRequestTrailersFeature
+    {
+        bool Available { get; }
+        Microsoft.AspNetCore.Http.IHeaderDictionary Trailers { get; }
+    }
+    public partial interface IHttpResetFeature
+    {
+        void Reset(int errorCode);
+    }
+    public partial interface IHttpResponseCompletionFeature
+    {
+        System.Threading.Tasks.Task CompleteAsync();
+    }
     public partial interface IHttpResponseFeature
     {
         System.IO.Stream Body { get; set; }
@@ -241,7 +254,7 @@ namespace Microsoft.AspNetCore.Http.Features
     }
     public partial interface IRequestBodyPipeFeature
     {
-        System.IO.Pipelines.PipeReader Reader { get; set; }
+        System.IO.Pipelines.PipeReader Reader { get; }
     }
     public partial interface IRequestCookiesFeature
     {
@@ -249,11 +262,15 @@ namespace Microsoft.AspNetCore.Http.Features
     }
     public partial interface IResponseBodyPipeFeature
     {
-        System.IO.Pipelines.PipeWriter Writer { get; set; }
+        System.IO.Pipelines.PipeWriter Writer { get; }
     }
     public partial interface IResponseCookiesFeature
     {
         Microsoft.AspNetCore.Http.IResponseCookies Cookies { get; }
+    }
+    public partial interface IServerVariablesFeature
+    {
+        string this[string variableName] { get; set; }
     }
     public partial interface IServiceProvidersFeature
     {

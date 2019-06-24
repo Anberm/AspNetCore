@@ -1,10 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net.Http;
-using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
-using Microsoft.AspNetCore.HeaderPropagation;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Extensions;
@@ -49,6 +46,9 @@ namespace HeaderPropagationSample
                 .AddHttpClient("test")
                 .AddHeaderPropagation();
 
+            services
+                .AddHttpClient("another")
+                .AddHeaderPropagation(options => options.Headers.Add("X-BetaFeatures", "X-Experiments"));
         }
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env, IHttpClientFactory clientFactory)
@@ -71,19 +71,23 @@ namespace HeaderPropagationSample
                         await context.Response.WriteAsync($"'/' Got Header '{header.Key}': {string.Join(", ", header.Value)}\r\n");
                     }
 
-                    await context.Response.WriteAsync("Sending request to /forwarded\r\n");
-
-                    var uri = UriHelper.BuildAbsolute(context.Request.Scheme, context.Request.Host, context.Request.PathBase, "/forwarded");
-                    var client = clientFactory.CreateClient("test");
-                    var response = await client.GetAsync(uri);
-
-                    foreach (var header in response.RequestMessage.Headers)
+                    var clientNames = new[] { "test", "another" };
+                    foreach (var clientName in clientNames)
                     {
-                        await context.Response.WriteAsync($"Sent Header '{header.Key}': {string.Join(", ", header.Value)}\r\n");
-                    }
+                        await context.Response.WriteAsync("Sending request to /forwarded\r\n");
 
-                    await context.Response.WriteAsync("Got response\r\n");
-                    await context.Response.WriteAsync(await response.Content.ReadAsStringAsync());
+                        var uri = UriHelper.BuildAbsolute(context.Request.Scheme, context.Request.Host, context.Request.PathBase, "/forwarded");
+                        var client = clientFactory.CreateClient(clientName);
+                        var response = await client.GetAsync(uri);
+
+                        foreach (var header in response.RequestMessage.Headers)
+                        {
+                            await context.Response.WriteAsync($"Sent Header '{header.Key}': {string.Join(", ", header.Value)}\r\n");
+                        }
+
+                        await context.Response.WriteAsync("Got response\r\n");
+                        await context.Response.WriteAsync(await response.Content.ReadAsStringAsync());
+                    }
                 });
 
                 endpoints.MapGet("/forwarded", async context =>

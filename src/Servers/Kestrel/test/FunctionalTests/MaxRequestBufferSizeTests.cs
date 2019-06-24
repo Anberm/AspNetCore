@@ -289,7 +289,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.FunctionalTests
             TaskCompletionSource<object> clientFinishedSendingRequestBody,
             Func<MemoryPool<byte>> memoryPoolFactory = null)
         {
-            var host = TransportSelector.GetWebHostBuilder(memoryPoolFactory)
+            var host = TransportSelector.GetWebHostBuilder(memoryPoolFactory, maxRequestBufferSize)
                 .ConfigureServices(AddTestLogging)
                 .UseKestrel(options =>
                 {
@@ -297,7 +297,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.FunctionalTests
                     {
                         if (useConnectionAdapter)
                         {
-                            listenOptions.ConnectionAdapters.Add(new PassThroughConnectionAdapter());
+                            listenOptions.UsePassThrough();
                         }
                     });
 

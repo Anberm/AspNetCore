@@ -58,30 +58,6 @@ namespace Microsoft.AspNetCore.Server.Kestrel.InMemory.FunctionalTests
         }
 
         [Fact]
-        public async Task PipesAreNotPersistedBySettingStreamPipeWriterAcrossRequests()
-        {
-            var responseBodyPersisted = false;
-            PipeWriter bodyPipe = null;
-            await using (var server = new TestServer(async context =>
-            {
-                if (context.Response.BodyWriter == bodyPipe)
-                {
-                    responseBodyPersisted = true;
-                }
-                bodyPipe = new StreamPipeWriter(new MemoryStream());
-                context.Response.BodyWriter = bodyPipe;
-
-                await context.Response.WriteAsync("hello, world");
-            }, new TestServiceContext(LoggerFactory)))
-            {
-                Assert.Equal(string.Empty, await server.HttpClientSlim.GetStringAsync($"http://localhost:{server.Port}/"));
-                Assert.Equal(string.Empty, await server.HttpClientSlim.GetStringAsync($"http://localhost:{server.Port}/"));
-
-                Assert.False(responseBodyPersisted);
-            }
-        }
-
-        [Fact]
         public async Task PipesAreNotPersistedAcrossRequests()
         {
             var responseBodyPersisted = false;
@@ -864,12 +840,11 @@ namespace Microsoft.AspNetCore.Server.Kestrel.InMemory.FunctionalTests
             }
         }
 
-        [Fact]
+        [Fact(Skip = "This test is racy and requires a product change.")]
         public async Task ConnectionClosesWhenFinReceivedBeforeRequestCompletes()
         {
             var testContext = new TestServiceContext(LoggerFactory)
             {
-                // FIN callbacks are scheduled so run inline to make this test more reliable
                 Scheduler = PipeScheduler.Inline
             };
 
@@ -880,6 +855,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.InMemory.FunctionalTests
                     await connection.Send(
                         "POST / HTTP/1.1");
                     connection.ShutdownSend();
+                    await connection.TransportConnection.WaitForCloseTask;
                     await connection.ReceiveEnd();
                 }
 
@@ -890,6 +866,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.InMemory.FunctionalTests
                         "Host:",
                         "Content-Length: 7");
                     connection.ShutdownSend();
+                    await connection.TransportConnection.WaitForCloseTask;
                     await connection.ReceiveEnd();
                 }
             }

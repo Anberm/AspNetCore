@@ -121,6 +121,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             _collection[typeof(IRequestBodyPipeFeature)] = CreateHttp1Connection();
             _collection[typeof(IHttpRequestIdentifierFeature)] = CreateHttp1Connection();
             _collection[typeof(IHttpRequestLifetimeFeature)] = CreateHttp1Connection();
+            _collection[typeof(IHttpRequestTrailersFeature)] = CreateHttp1Connection();
             _collection[typeof(IHttpConnectionFeature)] = CreateHttp1Connection();
             _collection[typeof(IHttpMaxRequestBodySizeFeature)] = CreateHttp1Connection();
             _collection[typeof(IHttpMinRequestBodyDataRateFeature)] = CreateHttp1Connection();
@@ -144,6 +145,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
             _collection.Set<IRequestBodyPipeFeature>(CreateHttp1Connection());
             _collection.Set<IHttpRequestIdentifierFeature>(CreateHttp1Connection());
             _collection.Set<IHttpRequestLifetimeFeature>(CreateHttp1Connection());
+            _collection.Set<IHttpRequestTrailersFeature>(CreateHttp1Connection());
             _collection.Set<IHttpConnectionFeature>(CreateHttp1Connection());
             _collection.Set<IHttpMaxRequestBodySizeFeature>(CreateHttp1Connection());
             _collection.Set<IHttpMinRequestBodyDataRateFeature>(CreateHttp1Connection());
@@ -159,12 +161,9 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
         }
 
         [Fact]
-        public void Http2StreamFeatureCollectionDoesNotIncludeMinRateFeatures()
+        public void Http2StreamFeatureCollectionDoesNotIncludeIHttpMinResponseDataRateFeature()
         {
-            Assert.Null(_http2Collection.Get<IHttpMinRequestBodyDataRateFeature>());
             Assert.Null(_http2Collection.Get<IHttpMinResponseDataRateFeature>());
-
-            Assert.NotNull(_collection.Get<IHttpMinRequestBodyDataRateFeature>());
             Assert.NotNull(_collection.Get<IHttpMinResponseDataRateFeature>());
         }
 
@@ -175,6 +174,23 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Tests
 
             Assert.NotNull(upgradeFeature);
             Assert.False(upgradeFeature.IsUpgradableRequest);
+        }
+
+        [Fact]
+        public void Http2StreamFeatureCollectionDoesIncludeIHttpMinRequestBodyDataRateFeature()
+        {
+            var minRateFeature = _http2Collection.Get<IHttpMinRequestBodyDataRateFeature>();
+
+            Assert.NotNull(minRateFeature);
+
+            Assert.Throws<NotSupportedException>(() => minRateFeature.MinDataRate);
+            Assert.Throws<NotSupportedException>(() => minRateFeature.MinDataRate = new MinDataRate(1, TimeSpan.FromSeconds(2)));
+
+            // You can set the MinDataRate to null though.
+            minRateFeature.MinDataRate = null;
+
+            // But you still cannot read the property;
+            Assert.Throws<NotSupportedException>(() => minRateFeature.MinDataRate);
         }
 
         private void CompareGenericGetterToIndexer()
