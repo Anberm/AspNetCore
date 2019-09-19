@@ -2,9 +2,6 @@
 // Licensed under the Apache License, Version 2.0. See License.txt in the project root for license information.
 
 using System;
-using System.Net.Http;
-using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.SignalR.Client;
@@ -37,11 +34,11 @@ namespace Ignitor
             var done = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
 
             // Click the counter button 1000 times
-            client.RenderBatchReceived += (int browserRendererId, int batchId, byte[] data) =>
+            client.RenderBatchReceived += (batch) =>
             {
-                if (batchId < 1000)
+                if (batch.Id < 1000)
                 {
-                    client.ClickAsync("thecounter");
+                    var _ = client.ClickAsync("thecounter");
                 }
                 else
                 {
@@ -49,14 +46,14 @@ namespace Ignitor
                 }
             };
 
-            await client.ConnectAsync(uri, prerendered: true);
+            await client.ConnectAsync(uri);
             await done.Task;
 
             return 0;
         }
 
-        private static void OnJSInterop(int callId, string identifier, string argsJson) =>
-            Console.WriteLine("JS Invoke: " + identifier + " (" + argsJson + ")");
+        private static void OnJSInterop(CapturedJSInteropCall call) =>
+            Console.WriteLine("JS Invoke: " + call.Identifier + " (" + call.ArgsJson + ")");
 
         public Program()
         {
@@ -75,8 +72,6 @@ namespace Ignitor
 
         public async Task ExecuteAsync(Uri uri)
         {
-            string circuitId = await GetPrerenderedCircuitId(uri);
-
             var builder = new HubConnectionBuilder();
             builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<IHubProtocol, IgnitorMessagePackHubProtocol>());
             builder.WithUrl(new Uri(uri, "_blazor/"));
@@ -93,7 +88,7 @@ namespace Ignitor
             connection.Closed += OnClosedAsync;
 
             // Now everything is registered so we can start the circuit.
-            var success = await connection.InvokeAsync<bool>("ConnectCircuit", circuitId);
+            var success = await connection.InvokeAsync<bool>("StartCircuit", uri.AbsoluteUri, uri.GetLeftPart(UriPartial.Authority));
 
             await TaskCompletionSource.Task;
 
@@ -129,19 +124,6 @@ namespace Ignitor
 
                 return Task.CompletedTask;
             }
-        }
-
-        private static async Task<string> GetPrerenderedCircuitId(Uri uri)
-        {
-            var httpClient = new HttpClient();
-            var response = await httpClient.GetAsync(uri);
-            var content = await response.Content.ReadAsStringAsync();
-
-            // <!-- M.A.C.Component:{"circuitId":"CfDJ8KZCIaqnXmdF...PVd6VVzfnmc1","rendererId":"0","componentId":"0"} -->
-            var match = Regex.Match(content, $"{Regex.Escape("<!-- M.A.C.Component:")}(.+?){Regex.Escape(" -->")}");
-            var json = JsonDocument.Parse(match.Groups[1].Value);
-            var circuitId = json.RootElement.GetProperty("circuitId").GetString();
-            return circuitId;
         }
 
         private static async Task ClickAsync(string id, ElementHive hive, HubConnection connection)

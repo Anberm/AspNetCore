@@ -15,18 +15,19 @@ using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http;
 using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.FlowControl;
 using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2.HPack;
 using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure;
+using Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Infrastructure.PipeWriterHelpers;
 
 namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
 {
     internal class Http2FrameWriter
     {
         // Literal Header Field without Indexing - Indexed Name (Index 8 - :status)
-        private static ReadOnlySpan<byte> _continueBytes => new byte[] { 0x08, 0x03, (byte)'1', (byte)'0', (byte)'0' };
+        private static ReadOnlySpan<byte> ContinueBytes => new byte[] { 0x08, 0x03, (byte)'1', (byte)'0', (byte)'0' };
 
         private readonly object _writeLock = new object();
         private readonly Http2Frame _outgoingFrame;
         private readonly HPackEncoder _hpackEncoder = new HPackEncoder();
-        private readonly PipeWriter _outputWriter;
+        private readonly ConcurrentPipeWriter _outputWriter;
         private readonly ConnectionContext _connectionContext;
         private readonly Http2Connection _http2Connection;
         private readonly OutputFlowControl _connectionOutputFlowControl;
@@ -51,9 +52,11 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
             ITimeoutControl timeoutControl,
             MinDataRate minResponseDataRate,
             string connectionId,
+            MemoryPool<byte> memoryPool,
             IKestrelTrace log)
         {
-            _outputWriter = outputPipeWriter;
+            // Allow appending more data to the PipeWriter when a flush is pending.
+            _outputWriter = new ConcurrentPipeWriter(outputPipeWriter, memoryPool, _writeLock);
             _connectionContext = connectionContext;
             _http2Connection = http2Connection;
             _connectionOutputFlowControl = connectionOutputFlowControl;
@@ -89,6 +92,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
 
                 _completed = true;
                 _connectionOutputFlowControl.Abort();
+                _outputWriter.Abort();
             }
         }
 
@@ -134,9 +138,9 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                 }
 
                 _outgoingFrame.PrepareHeaders(Http2HeadersFrameFlags.END_HEADERS, streamId);
-                _outgoingFrame.PayloadLength = _continueBytes.Length;
+                _outgoingFrame.PayloadLength = ContinueBytes.Length;
                 WriteHeaderUnsynchronized();
-                _outputWriter.Write(_continueBytes);
+                _outputWriter.Write(ContinueBytes);
                 return TimeFlushUnsynchronizedAsync();
             }
         }
@@ -541,7 +545,7 @@ namespace Microsoft.AspNetCore.Server.Kestrel.Core.Internal.Http2
                     return default;
                 }
 
-                _outgoingFrame.PreparePing(Http2PingFrameFlags.ACK);
+                _outgoingFrame.PreparePing(flags);
                 Debug.Assert(payload.Length == _outgoingFrame.PayloadLength); // 8
                 WriteHeaderUnsynchronized();
                 foreach (var segment in payload)

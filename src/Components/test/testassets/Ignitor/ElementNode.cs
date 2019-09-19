@@ -6,7 +6,9 @@ using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.Components.Browser;
+using Microsoft.AspNetCore.Components.Rendering;
+using Microsoft.AspNetCore.Components.RenderTree;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.AspNetCore.SignalR.Client;
 
 namespace Ignitor
@@ -62,9 +64,64 @@ namespace Ignitor
             _events[eventName] = descriptor;
         }
 
+        internal Task SelectAsync(HubConnection connection, string value)
+        {
+            if (!Events.TryGetValue("change", out var changeEventDescriptor))
+            {
+                throw new InvalidOperationException("Element does not have a change event.");
+            }
+
+            var args = new ChangeEventArgs()
+            {
+                Value = value
+            };
+
+            var webEventDescriptor = new WebEventDescriptor()
+            {
+                BrowserRendererId = 0,
+                EventHandlerId = changeEventDescriptor.EventId,
+                EventArgsType = "change",
+                EventFieldInfo = new EventFieldInfo
+                {
+                    ComponentId = 0,
+                    FieldValue = value
+                }
+            };
+
+            return DispatchEventCore(connection, Serialize(webEventDescriptor), Serialize(args));
+        }
+
+        public Task ClickAsync(HubConnection connection)
+        {
+            if (!Events.TryGetValue("click", out var clickEventDescriptor))
+            {
+                throw new InvalidOperationException("Element does not have a click event.");
+            }
+
+            var mouseEventArgs = new MouseEventArgs()
+            {
+                Type = clickEventDescriptor.EventName,
+                Detail = 1
+            };
+            var webEventDescriptor = new WebEventDescriptor
+            {
+                BrowserRendererId = 0,
+                EventHandlerId = clickEventDescriptor.EventId,
+                EventArgsType = "mouse",
+            };
+
+            return DispatchEventCore(connection, Serialize(webEventDescriptor), Serialize(mouseEventArgs));
+        }
+
+        private static string Serialize<T>(T payload) =>
+             JsonSerializer.Serialize(payload, new JsonSerializerOptions() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
+
+        private static Task DispatchEventCore(HubConnection connection, string descriptor, string eventArgs) =>
+            connection.InvokeAsync("DispatchBrowserEvent", descriptor, eventArgs);
+
         public class ElementEventDescriptor
         {
-            public ElementEventDescriptor(string eventName, int eventId)
+            public ElementEventDescriptor(string eventName, ulong eventId)
             {
                 EventName = eventName ?? throw new ArgumentNullException(nameof(eventName));
                 EventId = eventId;
@@ -72,35 +129,7 @@ namespace Ignitor
 
             public string EventName { get; }
 
-            public int EventId { get; }
-        }
-
-        public async Task ClickAsync(HubConnection connection)
-        {
-            if (!Events.TryGetValue("click", out var clickEventDescriptor))
-            {
-                throw new InvalidOperationException("Element does not have a click event.");
-            }
-
-            var mouseEventArgs = new UIMouseEventArgs()
-            {
-                Type = clickEventDescriptor.EventName,
-                Detail = 1
-            };
-            var browserDescriptor = new RendererRegistryEventDispatcher.BrowserEventDescriptor()
-            {
-                BrowserRendererId = 0,
-                EventHandlerId = clickEventDescriptor.EventId,
-                EventArgsType = "mouse",
-            };
-            var serializedJson = JsonSerializer.Serialize(mouseEventArgs, new JsonSerializerOptions() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            var argsObject = new object[] { browserDescriptor, serializedJson };
-            var callId = "0";
-            var assemblyName = "Microsoft.AspNetCore.Components.Browser";
-            var methodIdentifier = "DispatchEvent";
-            var dotNetObjectId = 0;
-            var clickArgs = JsonSerializer.Serialize(argsObject, new JsonSerializerOptions() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase });
-            await connection.InvokeAsync("BeginInvokeDotNetFromJS", callId, assemblyName, methodIdentifier, dotNetObjectId, clickArgs);
+            public ulong EventId { get; }
         }
     }
 }

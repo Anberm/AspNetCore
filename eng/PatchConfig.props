@@ -59,6 +59,13 @@ Later on, this will be checked using this condition:
   <PropertyGroup Condition=" '$(VersionPrefix)' == '2.2.6' ">
     <PackagesInPatch>
       Microsoft.AspNetCore.Mvc.Api.Analyzers;
+      Microsoft.AspNetCore.Server.HttpSys;
+      Microsoft.AspNetCore.Server.IIS;
+    </PackagesInPatch>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(VersionPrefix)' == '2.2.7' ">
+    <PackagesInPatch>
+      Microsoft.AspNetCore.Hosting;
     </PackagesInPatch>
   </PropertyGroup>
 </Project>

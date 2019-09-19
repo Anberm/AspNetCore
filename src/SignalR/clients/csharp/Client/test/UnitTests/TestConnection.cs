@@ -52,12 +52,6 @@ namespace Microsoft.AspNetCore.SignalR.Client.Tests
             var pair = DuplexPipe.CreateConnectionPair(options, options);
             Application = pair.Application;
             Transport = pair.Transport;
-
-            Application.Input.OnWriterCompleted((ex, _) =>
-            {
-                Application.Output.Complete();
-            },
-            null);
         }
 
         public override ValueTask DisposeAsync() => DisposeCoreAsync();
@@ -153,6 +147,7 @@ namespace Microsoft.AspNetCore.SignalR.Client.Tests
                     }
                     else if (result.IsCompleted)
                     {
+                        await Application.Output.CompleteAsync();
                         return null;
                     }
                 }

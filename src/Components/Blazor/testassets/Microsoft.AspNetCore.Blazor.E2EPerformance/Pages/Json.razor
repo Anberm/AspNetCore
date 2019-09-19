@@ -31,13 +31,13 @@
     string largeOrgChartJson;
     int numPeopleDeserialized;
 
-    protected override void OnInit()
+    protected override void OnInitialized()
     {
         smallOrgChartJson = JsonSerializer.Serialize(smallOrgChart);
         largeOrgChartJson = JsonSerializer.Serialize(largeOrgChart);
     }
 
-    protected override void OnAfterRender()
+    protected override void OnAfterRender(bool firstRender)
     {
         BenchmarkEvent.Send(JSRuntime, "Finished JSON processing");
     }

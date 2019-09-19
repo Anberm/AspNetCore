@@ -213,12 +213,14 @@ describe("HttpConnection", () => {
             const connection = new HttpConnection("http://tempuri.org", options);
             await expect(connection.start(TransferFormat.Text))
                 .rejects
-                .toThrow("Unable to connect to the server with any of the available transports. WebSockets failed: null ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. LongPolling failed: Error: 'LongPolling' is disabled by the client.");
+                .toThrow("Unable to connect to the server with any of the available transports. WebSockets failed: Error: There was an error with the transport. " +
+                "ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. LongPolling failed: Error: 'LongPolling' is disabled by the client.");
 
             expect(negotiateCount).toEqual(1);
         },
-        "Failed to start the transport 'WebSockets': null",
-        "Failed to start the connection: Error: Unable to connect to the server with any of the available transports. WebSockets failed: null ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. LongPolling failed: Error: 'LongPolling' is disabled by the client.");
+        "Failed to start the transport 'WebSockets': Error: There was an error with the transport.",
+        "Failed to start the connection: Error: Unable to connect to the server with any of the available transports. WebSockets failed: Error: There was an error with the transport. " +
+        "ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. LongPolling failed: Error: 'LongPolling' is disabled by the client.");
     });
 
     it("negotiate called again when transport fails to start and falls back", async () => {
@@ -790,6 +792,84 @@ describe("HttpConnection", () => {
             } finally {
                 await connection.stop();
             }
+        });
+    });
+
+    it("transport handlers set before start", async () => {
+        await VerifyLogger.run(async (logger) => {
+            const availableTransport = { transport: "LongPolling", transferFormats: ["Text"] };
+            let handlersSet = false;
+
+            let httpClientGetCount = 0;
+            const options: IHttpConnectionOptions = {
+                ...commonOptions,
+                httpClient: new TestHttpClient()
+                    .on("POST", () => ({ connectionId: "42", availableTransports: [availableTransport] }))
+                    .on("GET", () => {
+                        httpClientGetCount++;
+                        if (httpClientGetCount === 1) {
+                            if ((connection as any).transport.onreceive && (connection as any).transport.onclose) {
+                                handlersSet = true;
+                            }
+                            // First long polling request must succeed so start completes
+                            return "";
+                        }
+                    })
+                    .on("DELETE", () => new HttpResponse(202)),
+                logger,
+            } as IHttpConnectionOptions;
+
+            const connection = new HttpConnection("http://tempuri.org", options);
+            connection.onreceive = () => null;
+            try {
+                await connection.start(TransferFormat.Text);
+            } finally {
+                await connection.stop();
+            }
+
+            expect(handlersSet).toBe(true);
+        });
+    });
+
+    it("transport handlers set before start for custom transports", async () => {
+        await VerifyLogger.run(async (logger) => {
+            const availableTransport = { transport: "Custom", transferFormats: ["Text"] };
+            let handlersSet = false;
+            const transport: ITransport = {
+                connect: (url: string, transferFormat: TransferFormat) => {
+                    if (transport.onreceive && transport.onclose) {
+                        handlersSet = true;
+                    }
+                    return Promise.resolve();
+                },
+                onclose: null,
+                onreceive: null,
+                send: (data: any) => Promise.resolve(),
+                stop: () => {
+                    if (transport.onclose) {
+                        transport.onclose();
+                    }
+                    return Promise.resolve();
+                },
+            };
+
+            const options: IHttpConnectionOptions = {
+                ...commonOptions,
+                httpClient: new TestHttpClient()
+                    .on("POST", () => ({ connectionId: "42", availableTransports: [availableTransport] })),
+                logger,
+                transport,
+            } as IHttpConnectionOptions;
+
+            const connection = new HttpConnection("http://tempuri.org", options);
+            connection.onreceive = () => null;
+            try {
+                await connection.start(TransferFormat.Text);
+            } finally {
+                await connection.stop();
+            }
+
+            expect(handlersSet).toBe(true);
         });
     });
 

@@ -8,7 +8,6 @@ using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Server.IntegrationTesting;
 using Microsoft.AspNetCore.Testing;
-using Microsoft.AspNetCore.Testing.xunit;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Testing;
 using Xunit;
@@ -28,7 +27,8 @@ namespace FunctionalTests
 
         public ITestOutputHelper Output { get; }
 
-        [ConditionalTheory(Skip = "https://github.com/aspnet/AspNetCore/issues/11354")]
+        [Flaky("https://github.com/aspnet/aspnetcore-internal/issues/2865", FlakyOn.All)]
+        [ConditionalTheory]
         [OSSkipCondition(OperatingSystems.MacOSX, SkipReason = "Disabling this test on OSX until we have a resolution for https://github.com/aspnet/AspNetCore-Internal/issues/1619")]
         [InlineData("Startup")]
         [InlineData("StartupWithoutEndpointRouting")]
@@ -85,7 +85,7 @@ namespace FunctionalTests
 
             var originParameters = new DeploymentParameters
             {
-                TargetFramework = "netcoreapp3.0",
+                TargetFramework = "netcoreapp5.0",
                 RuntimeFlavor = RuntimeFlavor.CoreClr,
                 ServerType = ServerType.Kestrel,
                 ApplicationPath = Path.Combine(solutionPath, "CORS", "test", "testassets", "TestOrigin"),
@@ -98,12 +98,12 @@ namespace FunctionalTests
             var originDeployment = await originFactory.DeployAsync();
 
             var secondOriginFactory = ApplicationDeployerFactory.Create(originParameters, loggerFactory);
-            var secondOriginDeployment = await originFactory.DeployAsync();
+            var secondOriginDeployment = await secondOriginFactory.DeployAsync();
 
             var port = originDeployment.HttpClient.BaseAddress.Port;
             var destinationParameters = new DeploymentParameters
             {
-                TargetFramework = "netcoreapp3.0",
+                TargetFramework = "netcoreapp5.0",
                 RuntimeFlavor = RuntimeFlavor.CoreClr,
                 ServerType = ServerType.Kestrel,
                 ApplicationPath = Path.Combine(solutionPath, "CORS", "test", "testassets", "TestDestination"),

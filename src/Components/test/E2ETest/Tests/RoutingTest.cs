@@ -4,7 +4,6 @@
 using System;
 using System.Linq;
 using System.Runtime.InteropServices;
-using System.Threading.Tasks;
 using BasicTestApp;
 using BasicTestApp.RouterTest;
 using Microsoft.AspNetCore.Components.E2ETest.Infrastructure;
@@ -227,10 +226,6 @@ namespace Microsoft.AspNetCore.Components.E2ETest.Tests
             AssertHighlightedLinks("With parameters", "With more parameters");
 
             // Can remove parameters while remaining on same page
-            // WARNING: This only works because the WithParameters component overrides SetParametersAsync
-            // and explicitly resets its parameters to default when each new set of parameters arrives.
-            // Without that, the page would retain the old value.
-            // See https://github.com/aspnet/AspNetCore/issues/6864 where we reverted the logic to auto-reset.
             app.FindElement(By.LinkText("With parameters")).Click();
             Browser.Equal("Your full name is Abc .", () => app.FindElement(By.Id("test-info")).Text);
             AssertHighlightedLinks("With parameters");
@@ -374,9 +369,9 @@ namespace Microsoft.AspNetCore.Components.E2ETest.Tests
         }
 
         [Fact]
-        public void UsingUriHelperWithoutRouterWorks()
+        public void UsingNavigationManagerWithoutRouterWorks()
         {
-            var app = MountTestComponent<UriHelperComponent>();
+            var app = MountTestComponent<NavigationManagerComponent>();
             var initialUrl = Browser.Url;
 
             Browser.Equal(Browser.Url, () => app.FindElement(By.Id("test-info")).Text);
@@ -387,6 +382,83 @@ namespace Microsoft.AspNetCore.Components.E2ETest.Tests
             jsExecutor.ExecuteScript("history.back()");
 
             Browser.Equal(initialUrl, () => app.FindElement(By.Id("test-info")).Text);
+        }
+
+        [Fact]
+        public void UriHelperCanReadAbsoluteUriIncludingHash()
+        {
+            var app = MountTestComponent<NavigationManagerComponent>();
+            Browser.Equal(Browser.Url, () => app.FindElement(By.Id("test-info")).Text);
+
+            var uri = "/mytestpath?my=query&another#some/hash?tokens";
+            var expectedAbsoluteUri = $"{_serverFixture.RootUri}subdir{uri}";
+
+            SetUrlViaPushState(uri);
+            Browser.Equal(expectedAbsoluteUri, () => app.FindElement(By.Id("test-info")).Text);
+        }
+
+        [Fact]
+        public void CanArriveAtRouteWithExtension()
+        {
+            // This is an odd test, but it's primarily here to verify routing for routeablecomponentfrompackage isn't available due to
+            // some unknown reason
+            SetUrlViaPushState("/Default.html");
+
+            var app = MountTestComponent<TestRouter>();
+            Assert.Equal("This is the default page.", app.FindElement(By.Id("test-info")).Text);
+            AssertHighlightedLinks("With extension");
+        }
+
+        [Fact]
+        public void RoutingToComponentOutsideMainAppDoesNotWork()
+        {
+            SetUrlViaPushState("/routeablecomponentfrompackage.html");
+
+            var app = MountTestComponent<TestRouter>();
+            Assert.Equal("Oops, that component wasn't found!", app.FindElement(By.Id("test-info")).Text);
+        }
+
+        [Fact]
+        public void RoutingToComponentOutsideMainAppWorksWithAdditionalAssemblySpecified()
+        {
+            SetUrlViaPushState("/routeablecomponentfrompackage.html");
+
+            var app = MountTestComponent<TestRouterWithAdditionalAssembly>();
+            Assert.Contains("This component, including the CSS and image required to produce its", app.FindElement(By.CssSelector("div.special-style")).Text);
+        }
+
+        [Fact]
+        public void ResetsScrollPositionWhenPerformingInternalNavigation_LinkClick()
+        {
+            SetUrlViaPushState("/LongPage1");
+            var app = MountTestComponent<TestRouter>();
+            Browser.Equal("This is a long page you can scroll.", () => app.FindElement(By.Id("test-info")).Text);
+            BrowserScrollY = 500;
+            Browser.True(() => BrowserScrollY > 300); // Exact position doesn't matter
+
+            app.FindElement(By.LinkText("Long page 2")).Click();
+            Browser.Equal("This is another long page you can scroll.", () => app.FindElement(By.Id("test-info")).Text);
+            Browser.Equal(0, () => BrowserScrollY);
+        }
+
+        [Fact]
+        public void ResetsScrollPositionWhenPerformingInternalNavigation_ProgrammaticNavigation()
+        {
+            SetUrlViaPushState("/LongPage1");
+            var app = MountTestComponent<TestRouter>();
+            Browser.Equal("This is a long page you can scroll.", () => app.FindElement(By.Id("test-info")).Text);
+            BrowserScrollY = 500;
+            Browser.True(() => BrowserScrollY > 300); // Exact position doesn't matter
+
+            app.FindElement(By.Id("go-to-longpage2")).Click();
+            Browser.Equal("This is another long page you can scroll.", () => app.FindElement(By.Id("test-info")).Text);
+            Browser.Equal(0, () => BrowserScrollY);
+        }
+
+        private long BrowserScrollY
+        {
+            get => (long)((IJavaScriptExecutor)Browser).ExecuteScript("return window.scrollY");
+            set => ((IJavaScriptExecutor)Browser).ExecuteScript($"window.scrollTo(0, {value})");
         }
 
         private string SetUrlViaPushState(string relativeUri)

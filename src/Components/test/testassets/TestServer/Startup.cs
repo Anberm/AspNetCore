@@ -1,7 +1,8 @@
-using BasicTestApp;
+using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Localization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -25,7 +26,12 @@ namespace TestServer
             {
                 options.AddPolicy("AllowAll", _ => { /* Controlled below */ });
             });
-            services.AddServerSideBlazor();
+            services.AddServerSideBlazor()
+                .AddCircuitOptions(o =>
+                {
+                    var detailedErrors = Configuration.GetValue<bool>("circuit-detailed-errors");
+                    o.DetailedErrors = detailedErrors;
+                });
             services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
 
             services.AddAuthorization(options =>
@@ -58,17 +64,57 @@ namespace TestServer
             app.UseAuthentication();
 
             // Mount the server-side Blazor app on /subdir
-            app.Map("/subdir", subdirApp =>
+            app.Map("/subdir", app =>
             {
-                subdirApp.UseStaticFiles();
-                subdirApp.UseClientSideBlazorFiles<BasicTestApp.Startup>();
+                app.UseStaticFiles();
+                app.UseClientSideBlazorFiles<BasicTestApp.Startup>();
 
-                subdirApp.UseRouting();
-
-                subdirApp.UseEndpoints(endpoints =>
+                app.UseRequestLocalization(options =>
                 {
-                    endpoints.MapBlazorHub(typeof(Index), selector: "root");
-                    endpoints.MapFallbackToClientSideBlazor<BasicTestApp.Startup>("index.html");
+                    options.AddSupportedCultures("en-US", "fr-FR");
+                    options.AddSupportedUICultures("en-US", "fr-FR");
+
+                    // Cookie culture provider is included by default, but we want it to be the only one.
+                    options.RequestCultureProviders.Clear();
+                    options.RequestCultureProviders.Add(new CookieRequestCultureProvider());
+
+                    // We want the default to be en-US so that the tests for bind can work consistently.
+                    options.SetDefaultCulture("en-US");
+                });
+
+                app.MapWhen(ctx => ctx.Request.Cookies.TryGetValue("__blazor_execution_mode", out var value) && value == "server",
+                    child =>
+                    {
+                        child.UseRouting();
+                        child.UseEndpoints(childEndpoints =>
+                        {
+                            childEndpoints.MapBlazorHub();
+                            childEndpoints.MapFallbackToPage("/_ServerHost");
+                        });
+                    });
+
+                app.MapWhen(ctx => !ctx.Request.Query.ContainsKey("__blazor_execution_mode"),
+                    child =>
+                    {
+                        child.UseRouting();
+                        child.UseEndpoints(childEndpoints =>
+                        {
+                            childEndpoints.MapBlazorHub();
+                            childEndpoints.MapFallbackToClientSideBlazor<BasicTestApp.Startup>("index.html");
+                        });
+                    });
+            });
+
+            // Separately, mount a prerendered server-side Blazor app on /prerendered
+            app.Map("/prerendered", app =>
+            {
+                app.UsePathBase("/prerendered");
+                app.UseStaticFiles();
+                app.UseRouting();
+                app.UseEndpoints(endpoints =>
+                {
+                    endpoints.MapFallbackToPage("/PrerenderedHost");
+                    endpoints.MapBlazorHub();
                 });
             });
 
@@ -78,18 +124,12 @@ namespace TestServer
             {
                 endpoints.MapControllers();
                 endpoints.MapRazorPages();
-            });
 
-            // Separately, mount a prerendered server-side Blazor app on /prerendered
-            app.Map("/prerendered", subdirApp =>
-            {
-                subdirApp.UsePathBase("/prerendered");
-                subdirApp.UseStaticFiles();
-                subdirApp.UseRouting();
-                subdirApp.UseEndpoints(endpoints =>
+                // Redirect for convenience when testing locally since we're hosting the app at /subdir/
+                endpoints.Map("/", context =>
                 {
-                    endpoints.MapFallbackToPage("/PrerenderedHost");
-                    endpoints.MapBlazorHub();
+                    context.Response.Redirect("/subdir");
+                    return Task.CompletedTask;
                 });
             });
         }
